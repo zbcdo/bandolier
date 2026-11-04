@@ -6,7 +6,7 @@ Run everything **from your own machine**; nothing is copied to the server and no
 ## Layout
 
 ```
-provision.sh    # local runner: streams scripts over SSH
+bandolier.sh    # local runner: streams scripts over SSH
 bootstrap.sh    # baseline hardening, runs once as root
 lib.sh          # shared helpers, prepended to every role
 roles/          # one script per service: postgres.sh, php.sh, caddy.sh ...
@@ -17,7 +17,7 @@ roles/          # one script per service: postgres.sh, php.sh, caddy.sh ...
 
 ```bash
 cp .env.example .env && chmod 600 .env   # set NEW_USER, keys, ports...
-./provision.sh bootstrap 203.0.113.10    # connects as root on port 22
+./bandolier.sh bootstrap 203.0.113.10    # connects as root on port 22
 ```
 
 You'll be prompted (hidden input) for a sudo password if `NEW_USER_PASSWORD` is blank in `.env`.
@@ -32,8 +32,8 @@ base tools (`htop`/`btop` by RAM, `nano`, `screen`, `tmux`, `git`, ...).
 ## Adding services
 
 ```bash
-./provision.sh role 203.0.113.10 postgres
-./provision.sh role 203.0.113.10 php caddy
+./bandolier.sh role 203.0.113.10 postgres
+./bandolier.sh role 203.0.113.10 php caddy
 ```
 
 Roles connect as `NEW_USER` on `SSH_PORT` and run under `sudo`. Each role is idempotent.
