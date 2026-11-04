@@ -1,29 +1,46 @@
 #!/usr/bin/env bash
-# provision.sh — run from YOUR machine. Streams scripts to a server over SSH.
+# bandolier.sh — run from YOUR machine. Streams scripts to a server over SSH.
 # Nothing is copied to the server's disk; secrets travel inside the SSH session on stdin,
 # never on the command line (so never in `ps`, shell history, or logs).
 #
-#   ./provision.sh bootstrap <host>                # first run: as root, hardens the box
-#   ./provision.sh role <host> postgres [php ...]  # later runs: as NEW_USER via sudo
+#   ./bandolier.sh [--env FILE] bootstrap <host>                # first run: as root, hardens the box
+#   ./bandolier.sh [--env FILE] role <host> postgres [php ...]  # later runs: as NEW_USER via sudo
 #
-# Reads ./.env (see .env.example). Any var can also be overridden inline:
-#   SSH_PORT=2222 ./provision.sh role myhost caddy
+# Reads ./.env by default (see .env.example). Keep one file per server and pick it with --env:
+#   ./bandolier.sh --env .env.mynewserver bootstrap 203.0.113.10
+# Any var can also be overridden inline:
+#   SSH_PORT=2222 ./bandolier.sh role myhost caddy
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-usage() { sed -n '2,12p' "$0"; exit 1; }
+usage() { sed -n '2,14p' "$0"; exit 1; }
+
+# ── Flags ──
+ENV_FILE=".env"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env)    [[ -n "${2:-}" ]] || usage; ENV_FILE="$2"; shift 2 ;;
+    --env=*)  ENV_FILE="${1#--env=}"; shift ;;
+    -h|--help) usage ;;
+    --*)      echo "Unknown flag: $1"; usage ;;
+    *)        break ;;
+  esac
+done
 [[ $# -ge 2 ]] || usage
 MODE="$1"; HOST="$2"; shift 2
 
-# ── Load .env (does not override vars already set in the environment) ──
-if [[ -f .env ]]; then
+# ── Load env file (does not override vars already set in the environment) ──
+if [[ -f "$ENV_FILE" ]]; then
+  echo "==> Using config: $ENV_FILE"
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" || "$line" == \#* ]] && continue
     key="${line%%=*}"; val="${line#*=}"
     val="${val%\"}"; val="${val#\"}"          # strip optional surrounding quotes
     [[ -n "${!key:-}" ]] || export "$key=$val"
-  done < .env
+  done < "$ENV_FILE"
+elif [[ "$ENV_FILE" != ".env" ]]; then
+  echo "Config file not found: $ENV_FILE"; exit 1
 fi
 
 # ── Defaults ──

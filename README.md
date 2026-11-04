@@ -20,6 +20,15 @@ cp .env.example .env && chmod 600 .env   # set NEW_USER, keys, ports...
 ./bandolier.sh bootstrap 203.0.113.10    # connects as root on port 22
 ```
 
+Managing several servers? Keep one config per box and pick it with `--env`
+(`.env.*` is gitignored, `.env.example` is not):
+
+```bash
+cp .env.example .env.webserver
+./bandolier.sh --env .env.webserver bootstrap 203.0.113.10
+./bandolier.sh --env .env.webserver role 203.0.113.10 caddy
+```
+
 You'll be prompted (hidden input) for a sudo password if `NEW_USER_PASSWORD` is blank in `.env`.
 When it finishes, **open a second terminal and confirm** `ssh -p <SSH_PORT> <NEW_USER>@host` works
 before closing the first — root login and password auth are now off.
