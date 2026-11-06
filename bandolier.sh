@@ -52,7 +52,7 @@ fi
 # Forward these to the remote script if set.
 FORWARD_VARS=(NEW_USER NEW_USER_PASSWORD SUDO_NOPASSWD PROVIDER SSH_PUBKEY SSH_PORT OPEN_PORTS
               TIMEZONE AUTO_REBOOT AUTO_REBOOT_TIME BASE_PACKAGES BTOP_MIN_MEM_GB
-              PG_VERSION PHP_VERSION CADDY_DOMAIN)
+              PG_VERSION PG_PORT PG_ADMIN_USER PG_ADMIN_PASSWORD PHP_VERSION CADDY_DOMAIN)
 
 env_block() {
   for v in "${FORWARD_VARS[@]}"; do
@@ -96,6 +96,14 @@ case "$MODE" in
     for role in "$@"; do
       f="roles/$role.sh"
       [[ -f "$f" ]] || { echo "Unknown role: $role (no $f)"; exit 1; }
+      # Role-specific secrets: prompted here (hidden) when not stored in .env, forwarded on stdin.
+      if [[ "$role" == postgres && -z "${PG_ADMIN_PASSWORD:-}" ]]; then
+        read -rsp "PostgreSQL password for admin role '${PG_ADMIN_USER:-$NEW_USER}' (blank = skip creating it): " PG_ADMIN_PASSWORD; echo
+        if [[ -n "$PG_ADMIN_PASSWORD" ]]; then
+          read -rsp "Confirm: " confirm; echo
+          [[ "$PG_ADMIN_PASSWORD" == "$confirm" ]] || { echo "Passwords differ."; exit 1; }
+        fi
+      fi
       echo "==> Applying role '$role' on $HOST as $NEW_USER"
       { pw_line; env_block; cat lib.sh "$f"; } | ssh -p "$SSH_PORT" "$NEW_USER@$HOST" "$SUDO_CMD"
     done

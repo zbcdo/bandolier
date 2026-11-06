@@ -47,6 +47,26 @@ base tools (`htop`/`btop` by RAM, `nano`, `screen`, `tmux`, `git`, ...).
 
 Roles connect as `NEW_USER` on `SSH_PORT` and run under `sudo`. Each role is idempotent.
 
+### postgres
+
+Installs PostgreSQL from the official PGDG repo. Pick the major with `PG_VERSION` (`16`, `17` or `18`)
+and the port with `PG_PORT` (default `5432`). The server listens on `127.0.0.1`/`::1` only and the
+port is **never opened in ufw**: the only way in from outside is an SSH tunnel.
+
+A superuser role `PG_ADMIN_USER` (default: `NEW_USER`) is created with `PG_ADMIN_PASSWORD`
+(prompted, hidden, if blank in `.env`; leave the prompt empty to skip the role). Re-running the role
+updates the password and rewrites `/etc/postgresql/<ver>/main/conf.d/10-bandolier.conf`.
+
+Connect a desktop client (pgAdmin, DBeaver, TablePlus, DataGrip, ...) through a tunnel:
+
+```bash
+ssh -p <SSH_PORT> -N -L 5432:127.0.0.1:<PG_PORT> <NEW_USER>@host   # keep running
+# client: host=localhost port=5432 user=<PG_ADMIN_USER> db=postgres
+```
+
+Most clients have a built-in SSH tab: point it at `<NEW_USER>@host:<SSH_PORT>` with your key and set
+the database host to `127.0.0.1:<PG_PORT>`.
+
 ## How secrets are handled
 
 - `.env` is gitignored; the repo contains only logic and can be public.
