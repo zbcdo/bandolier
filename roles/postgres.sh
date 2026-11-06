@@ -5,6 +5,7 @@
 #   PG_PORT           TCP port on the server  (default 5432)
 #   PG_ADMIN_USER     role with a password for the desktop client (default: NEW_USER)
 #   PG_ADMIN_PASSWORD prompted by bandolier.sh when blank; blank at this point = skip role creation
+#   PG_MAX_CONNECTIONS override for the RAM-derived default (30 below 2GB, else 100)
 
 PG_VERSION="${PG_VERSION:-16}"
 PG_PORT="${PG_PORT:-5432}"
@@ -53,11 +54,28 @@ CONF_DIR="/etc/postgresql/$PG_VERSION/main"
 log "Binding cluster $PG_VERSION/main to 127.0.0.1/::1 port $PG_PORT"
 # Debian's postgresql.conf ends with include_dir = 'conf.d'; files there override it.
 install -d -m 755 -o postgres -g postgres "$CONF_DIR/conf.d"
+# Memory-aware sizing. postgresql-common's defaults assume a dedicated multi-GB host
+# (effective_cache_size ends up at 5GB on a 512MB droplet). Scale from MemTotal instead.
+MEM_MB=$(( $(awk '/MemTotal/ {print $2}' /proc/meminfo) / 1024 ))
+# Under 2GB the box is shared with the app and the proxy: 1/8 of RAM, else the usual 1/4.
+if (( MEM_MB < 2048 )); then PG_SHARED_BUFFERS_MB=$(( MEM_MB / 8 )); else PG_SHARED_BUFFERS_MB=$(( MEM_MB / 4 )); fi
+(( PG_SHARED_BUFFERS_MB < 64 )) && PG_SHARED_BUFFERS_MB=64
+PG_CACHE_MB=$(( MEM_MB / 2 ))
+PG_MAINT_MB=$(( MEM_MB / 16 ));                (( PG_MAINT_MB < 32 )) && PG_MAINT_MB=32; (( PG_MAINT_MB > 1024 )) && PG_MAINT_MB=1024
+if (( MEM_MB < 2048 )); then PG_MAX_CONN=30; PG_WORK_MEM_MB=2; else PG_MAX_CONN=100; PG_WORK_MEM_MB=4; fi
+PG_MAX_CONN="${PG_MAX_CONNECTIONS:-$PG_MAX_CONN}"
 cat > "$CONF_DIR/conf.d/10-bandolier.conf" <<CONF
 # Managed by bandolier (roles/postgres.sh). Re-running the role rewrites this file.
 listen_addresses = 'localhost'
 port = ${PG_PORT}
 password_encryption = 'scram-sha-256'
+
+# Sized for ${MEM_MB} MB of RAM on this host (shared with the app and the proxy).
+shared_buffers = ${PG_SHARED_BUFFERS_MB}MB
+effective_cache_size = ${PG_CACHE_MB}MB
+maintenance_work_mem = ${PG_MAINT_MB}MB
+work_mem = ${PG_WORK_MEM_MB}MB
+max_connections = ${PG_MAX_CONN}
 CONF
 chown postgres:postgres "$CONF_DIR/conf.d/10-bandolier.conf"
 chmod 640 "$CONF_DIR/conf.d/10-bandolier.conf"
@@ -109,6 +127,7 @@ cat <<EOS
 
   PostgreSQL:  $PG_VERSION (cluster main), listening on 127.0.0.1 / ::1 port $PG_PORT only
   Config:      $CONF_DIR/conf.d/10-bandolier.conf
+  Sizing:      ${MEM_MB} MB RAM -> shared_buffers ${PG_SHARED_BUFFERS_MB}MB, cache ${PG_CACHE_MB}MB, work_mem ${PG_WORK_MEM_MB}MB, max_connections ${PG_MAX_CONN}
   Admin role:  $ADMIN_STATUS
   Firewall:    port $PG_PORT NOT opened — reachable only through an SSH tunnel
 

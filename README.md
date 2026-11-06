@@ -36,7 +36,8 @@ before closing the first — root login and password auth are now off.
 What bootstrap does: full upgrade (maintainer configs on conflict), unattended upgrades with
 auto-reboot, admin user + sudo + your SSH key, key-only SSH on your chosen port with root disabled,
 ufw (deny in, allow out, SSH rate-limited, 80/443 open), fail2ban on sshd, sysctl hardening,
-base tools (`htop`/`btop` by RAM, `nano`, `screen`, `tmux`, `git`, ...).
+base tools (`htop`/`btop` by RAM, `nano`, `screen`, `tmux`, `git`, ...), and a swap file on boxes
+under 2GB (`SWAP_SIZE=auto`; set a size or `none`).
 
 ## Adding services
 
@@ -51,7 +52,9 @@ Roles connect as `NEW_USER` on `SSH_PORT` and run under `sudo`. Each role is ide
 
 Installs PostgreSQL from the official PGDG repo. Pick the major with `PG_VERSION` (`16`, `17` or `18`)
 and the port with `PG_PORT` (default `5432`). The server listens on `127.0.0.1`/`::1` only and the
-port is **never opened in ufw**: the only way in from outside is an SSH tunnel.
+port is **never opened in ufw**: the only way in from outside is an SSH tunnel. Memory settings
+(`shared_buffers`, `effective_cache_size`, `work_mem`, `max_connections`) are sized from the host's
+RAM, since the stock defaults assume a dedicated multi-GB server.
 
 A superuser role `PG_ADMIN_USER` (default: `NEW_USER`) is created with `PG_ADMIN_PASSWORD`
 (prompted, hidden, if blank in `.env`; leave the prompt empty to skip the role). Re-running the role
