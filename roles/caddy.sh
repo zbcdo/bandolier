@@ -93,7 +93,10 @@ HTML
 fi
 
 for f in /etc/caddy/Caddyfile "$SITE_FILE"; do caddy fmt --overwrite "$f" >/dev/null 2>&1 || true; done
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null \
+# Validate AS the service user: validate opens log files, and doing it as root would leave
+# root-owned logs that caddy.service then cannot write. Fix ownership first for the same reason.
+chown -R caddy:caddy /var/log/caddy
+runuser -u caddy -- caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null \
   || die "Caddy config invalid — not reloading. Inspect /etc/caddy/Caddyfile and $SITE_FILE"
 
 # ───────────────────────── 4. Firewall ─────────────────────────
