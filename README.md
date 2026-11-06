@@ -78,7 +78,8 @@ Leave it blank to serve plain HTTP on `:80` without TLS. Set `CADDY_EMAIL` for A
 
 What the site serves:
 
-- `CADDY_UPSTREAM=127.0.0.1:3000` (or `unix//run/app.sock`) → reverse proxy.
+- `CADDY_UPSTREAM=127.0.0.1:3000` (or `unix//run/app.sock`) → reverse proxy. Add `CADDY_CLOUDFLARE=yes`
+  when the DNS is proxied through Cloudflare, so the upstream sees the real client address.
 - Otherwise static files from `CADDY_ROOT` (default `/var/www/<domain>`, seeded with a placeholder
   `index.html` if empty). Add `CADDY_PHP=yes` to route `.php` through php-fpm for `PHP_VERSION`.
 
@@ -97,5 +98,5 @@ reloaded, and 80/tcp, 443/tcp and 443/udp are opened in ufw.
 ## Provider handling
 
 `PROVIDER=auto` (default) detects DigitalOcean from DMI and reuses the SSH key DO injected into
-root's `authorized_keys`. Anywhere else, the key comes from `SSH_PUBKEY_FILE_LOCAL`
-(default `~/.ssh/id_ed25519.pub`) or `SSH_PUBKEY`. An explicit key always wins.
+root's `authorized_keys`. Anywhere else, the keys come from `SSH_PUBKEY_FILE_LOCAL`
+(default `~/.ssh/id_ed25519.pub`) and `SSH_PUBKEY`; both are installed when both are set.

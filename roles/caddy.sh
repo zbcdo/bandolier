@@ -6,11 +6,13 @@
 #   CADDY_UPSTREAM  reverse-proxy target, e.g. 127.0.0.1:3000 or unix//run/app.sock (optional)
 #   CADDY_ROOT      static root when not proxying (default /var/www/<first domain>)
 #   CADDY_PHP       yes = serve PHP via php-fpm socket for PHP_VERSION (needs the php role)
+#   CADDY_CLOUDFLARE yes = behind Cloudflare's proxy: pass CF-Connecting-IP as X-Forwarded-For
 
 CADDY_DOMAIN="${CADDY_DOMAIN:-}"
 CADDY_EMAIL="${CADDY_EMAIL:-}"
 CADDY_UPSTREAM="${CADDY_UPSTREAM:-}"
 CADDY_PHP="${CADDY_PHP:-no}"
+CADDY_CLOUDFLARE="${CADDY_CLOUDFLARE:-no}"   # yes = site is behind Cloudflare's proxy (orange cloud)
 PHP_VERSION="${PHP_VERSION:-8.5}"
 
 read -r FIRST_DOMAIN _ <<< "$CADDY_DOMAIN"
@@ -67,7 +69,13 @@ SITE_FILE="/etc/caddy/sites/${SITE_NAME}.caddy"
   printf '\tlog {\n\t\toutput file /var/log/caddy/%s.log {\n\t\t\troll_size 10MiB\n\t\t\troll_keep 5\n\t\t}\n\t}\n' "$SITE_NAME"
   printf '\theader {\n\t\tX-Content-Type-Options nosniff\n\t\tX-Frame-Options SAMEORIGIN\n\t\tReferrer-Policy strict-origin-when-cross-origin\n\t\t-Server\n\t}\n'
   if [[ -n "$CADDY_UPSTREAM" ]]; then
-    printf '\treverse_proxy %s\n' "$CADDY_UPSTREAM"
+    if [[ "$CADDY_CLOUDFLARE" == yes ]]; then
+      # Behind Cloudflare's proxy the real client is in CF-Connecting-IP; hand it to the app
+      # as X-Forwarded-For so the app only has to trust Caddy (127.0.0.1).
+      printf '\treverse_proxy %s {\n\t\theader_up X-Forwarded-For {http.request.header.CF-Connecting-IP}\n\t}\n' "$CADDY_UPSTREAM"
+    else
+      printf '\treverse_proxy %s\n' "$CADDY_UPSTREAM"
+    fi
   else
     printf '\troot * %s\n' "$CADDY_ROOT"
     if [[ "$CADDY_PHP" == yes ]]; then

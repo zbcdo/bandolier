@@ -53,7 +53,7 @@ fi
 FORWARD_VARS=(NEW_USER NEW_USER_PASSWORD SUDO_NOPASSWD PROVIDER SSH_PUBKEY SSH_PORT OPEN_PORTS
               TIMEZONE AUTO_REBOOT AUTO_REBOOT_TIME BASE_PACKAGES BTOP_MIN_MEM_GB SWAP_SIZE
               PG_VERSION PG_PORT PG_ADMIN_USER PG_ADMIN_PASSWORD PG_MAX_CONNECTIONS PHP_VERSION
-              CADDY_DOMAIN CADDY_EMAIL CADDY_UPSTREAM CADDY_ROOT CADDY_PHP)
+              CADDY_DOMAIN CADDY_EMAIL CADDY_UPSTREAM CADDY_ROOT CADDY_PHP CADDY_CLOUDFLARE)
 
 env_block() {
   for v in "${FORWARD_VARS[@]}"; do
@@ -65,10 +65,12 @@ env_block() {
 
 case "$MODE" in
   bootstrap)
-    # Key: explicit SSH_PUBKEY wins; else read the local .pub file; else let the remote
-    # fall back to DigitalOcean's injected root keys (PROVIDER=digitalocean/auto).
-    if [[ -z "${SSH_PUBKEY:-}" && -s "$SSH_PUBKEY_FILE_LOCAL" ]]; then
-      SSH_PUBKEY="$(cat "$SSH_PUBKEY_FILE_LOCAL")"
+    # Keys: SSH_PUBKEY (literal "\n" separates several) PLUS the local .pub file, so the machine
+    # running this is never locked out by a key list written for another device. If neither is
+    # set, the remote falls back to DigitalOcean's injected root keys (PROVIDER=digitalocean/auto).
+    SSH_PUBKEY="${SSH_PUBKEY//\\n/$'\n'}"
+    if [[ -s "$SSH_PUBKEY_FILE_LOCAL" ]]; then
+      SSH_PUBKEY="${SSH_PUBKEY:+$SSH_PUBKEY$'\n'}$(cat "$SSH_PUBKEY_FILE_LOCAL")"
     fi
     if [[ -z "${NEW_USER_PASSWORD:-}" && "$SUDO_NOPASSWD" != "yes" ]]; then
       read -rsp "Password for sudo user '$NEW_USER' (blank = no password, requires SUDO_NOPASSWD=yes): " NEW_USER_PASSWORD; echo
