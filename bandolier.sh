@@ -8,7 +8,7 @@
 #
 # Reads ./.env by default (see .env.example). Keep one file per server and pick it with --env:
 #   ./bandolier.sh --env .env.mynewserver bootstrap 203.0.113.10
-# Any var can also be overridden inline:
+# Any var can also be overridden inline (an empty value, e.g. CADDY_UPSTREAM=, also overrides):
 #   SSH_PORT=2222 ./bandolier.sh role myhost caddy
 
 set -euo pipefail
@@ -37,7 +37,7 @@ if [[ -f "$ENV_FILE" ]]; then
     [[ -z "$line" || "$line" == \#* ]] && continue
     key="${line%%=*}"; val="${line#*=}"
     val="${val%\"}"; val="${val#\"}"          # strip optional surrounding quotes
-    [[ -n "${!key:-}" ]] || export "$key=$val"
+    [[ -n "${!key+x}" ]] || export "$key=$val"   # set-but-empty counts as an override
   done < "$ENV_FILE"
 elif [[ "$ENV_FILE" != ".env" ]]; then
   echo "Config file not found: $ENV_FILE"; exit 1

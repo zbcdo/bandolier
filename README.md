@@ -30,6 +30,13 @@ cp .env.example .env.webserver
 ```
 
 You'll be prompted (hidden input) for a sudo password if `NEW_USER_PASSWORD` is blank in `.env`.
+
+Any variable can be overridden for a single run by setting it inline. An empty value counts too,
+which is how you reuse one config for a second site that differs in a few settings:
+
+```bash
+CADDY_DOMAIN=static.example.com CADDY_UPSTREAM= ./bandolier.sh --env .env.webserver role 203.0.113.10 caddy
+```
 When it finishes, **open a second terminal and confirm** `ssh -p <SSH_PORT> <NEW_USER>@host` works
 before closing the first — root login and password auth are now off.
 
@@ -84,8 +91,9 @@ What the site serves:
   `index.html` if empty). Add `CADDY_PHP=yes` to route `.php` through php-fpm for `PHP_VERSION`.
 
 Each run writes `/etc/caddy/sites/<domain>.caddy`, so running again with a different `CADDY_DOMAIN`
-adds a second site instead of replacing the first. The config is validated before Caddy is
-reloaded, and 80/tcp, 443/tcp and 443/udp are opened in ufw.
+adds a second site instead of replacing the first (override `CADDY_UPSTREAM=` inline to make it
+a static site). The config is validated before Caddy is reloaded, and 80/tcp, 443/tcp and
+443/udp are opened in ufw.
 
 ## How secrets are handled
 
