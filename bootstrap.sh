@@ -22,6 +22,7 @@ AUTO_REBOOT="${AUTO_REBOOT:-true}"
 AUTO_REBOOT_TIME="${AUTO_REBOOT_TIME:-04:00}"
 BASE_PACKAGES="${BASE_PACKAGES:-curl wget git unzip vim nano screen tmux htop ncdu jq ca-certificates gnupg lsb-release apt-transport-https software-properties-common ufw fail2ban unattended-upgrades apt-listchanges}"
 BTOP_MIN_MEM_GB="${BTOP_MIN_MEM_GB:-2}"
+SWAP_SIZE="${SWAP_SIZE:-auto}"              # auto = 1G when RAM < 2GB, none otherwise | 2G | none
 # ──────────────────────────────────────────────────────────────────────────────────
 
 export DEBIAN_FRONTEND=noninteractive
@@ -83,6 +84,36 @@ fi
 
 log "Setting timezone to $TIMEZONE"
 timedatectl set-timezone "$TIMEZONE" || warn "Could not set timezone."
+
+# ───────────────────────── 2b. Swap ─────────────────────────
+# Cloud images ship without swap; on small boxes one apt run next to a database is enough
+# to summon the OOM killer. Swap is a safety net, not performance: swappiness stays low.
+if [[ "$SWAP_SIZE" == auto ]]; then
+  (( MEM_KB < 2 * 1024 * 1024 )) && SWAP_SIZE=1G || SWAP_SIZE=none
+fi
+if [[ "$SWAP_SIZE" != none ]]; then
+  if swapon --show --noheadings | grep -q .; then
+    log "Swap already active — leaving it alone"
+  else
+    log "Creating ${SWAP_SIZE} swap file at /swapfile"
+    case "$SWAP_SIZE" in
+      *[Gg]) swap_mb=$(( ${SWAP_SIZE%[Gg]} * 1024 )) ;;
+      *[Mm]) swap_mb=$(( ${SWAP_SIZE%[Mm]} )) ;;
+      *)     die "SWAP_SIZE must look like 1G or 512M (got '$SWAP_SIZE')" ;;
+    esac
+    fallocate -l "$SWAP_SIZE" /swapfile || dd if=/dev/zero of=/swapfile bs=1M count="$swap_mb" status=none
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  fi
+  cat > /etc/sysctl.d/90-swap.conf <<'EOF'
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
+EOF
+else
+  log "Swap: none requested"
+fi
 
 # ───────────────────────── 3. Unattended upgrades ─────────────────────────
 log "Configuring unattended-upgrades"
@@ -220,6 +251,7 @@ cat <<EOF
   Firewall:    deny in / allow out; open: ${SSH_PORT}/tcp (limited) $OPEN_PORTS
   fail2ban:    sshd jail, backend=systemd
   Updates:     unattended, maintainer configs, auto-reboot=$AUTO_REBOOT @ $AUTO_REBOOT_TIME
+  Swap:        $(swapon --show --noheadings --bytes 2>/dev/null | awk '{printf "%s (%d MB)", $1, $3/1048576}' || true)$( swapon --show --noheadings | grep -q . || echo none )
 
   >>> Verify from a NEW terminal before closing anything:
       ssh -p $SSH_PORT $NEW_USER@$(hostname -I | awk '{print $1}')

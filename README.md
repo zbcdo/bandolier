@@ -30,13 +30,21 @@ cp .env.example .env.webserver
 ```
 
 You'll be prompted (hidden input) for a sudo password if `NEW_USER_PASSWORD` is blank in `.env`.
+
+Any variable can be overridden for a single run by setting it inline. An empty value counts too,
+which is how you reuse one config for a second site that differs in a few settings:
+
+```bash
+CADDY_DOMAIN=static.example.com CADDY_UPSTREAM= ./bandolier.sh --env .env.webserver role 203.0.113.10 caddy
+```
 When it finishes, **open a second terminal and confirm** `ssh -p <SSH_PORT> <NEW_USER>@host` works
 before closing the first — root login and password auth are now off.
 
 What bootstrap does: full upgrade (maintainer configs on conflict), unattended upgrades with
 auto-reboot, admin user + sudo + your SSH key, key-only SSH on your chosen port with root disabled,
 ufw (deny in, allow out, SSH rate-limited, 80/443 open), fail2ban on sshd, sysctl hardening,
-base tools (`htop`/`btop` by RAM, `nano`, `screen`, `tmux`, `git`, ...).
+base tools (`htop`/`btop` by RAM, `nano`, `screen`, `tmux`, `git`, ...), and a swap file on boxes
+under 2GB (`SWAP_SIZE=auto`; set a size or `none`).
 
 ## Adding services
 
@@ -51,7 +59,9 @@ Roles connect as `NEW_USER` on `SSH_PORT` and run under `sudo`. Each role is ide
 
 Installs PostgreSQL from the official PGDG repo. Pick the major with `PG_VERSION` (`16`, `17` or `18`)
 and the port with `PG_PORT` (default `5432`). The server listens on `127.0.0.1`/`::1` only and the
-port is **never opened in ufw**: the only way in from outside is an SSH tunnel.
+port is **never opened in ufw**: the only way in from outside is an SSH tunnel. Memory settings
+(`shared_buffers`, `effective_cache_size`, `work_mem`, `max_connections`) are sized from the host's
+RAM, since the stock defaults assume a dedicated multi-GB server.
 
 A superuser role `PG_ADMIN_USER` (default: `NEW_USER`) is created with `PG_ADMIN_PASSWORD`
 (prompted, hidden, if blank in `.env`; leave the prompt empty to skip the role). Re-running the role
@@ -75,13 +85,15 @@ Leave it blank to serve plain HTTP on `:80` without TLS. Set `CADDY_EMAIL` for A
 
 What the site serves:
 
-- `CADDY_UPSTREAM=127.0.0.1:3000` (or `unix//run/app.sock`) → reverse proxy.
+- `CADDY_UPSTREAM=127.0.0.1:3000` (or `unix//run/app.sock`) → reverse proxy. Add `CADDY_CLOUDFLARE=yes`
+  when the DNS is proxied through Cloudflare, so the upstream sees the real client address.
 - Otherwise static files from `CADDY_ROOT` (default `/var/www/<domain>`, seeded with a placeholder
   `index.html` if empty). Add `CADDY_PHP=yes` to route `.php` through php-fpm for `PHP_VERSION`.
 
 Each run writes `/etc/caddy/sites/<domain>.caddy`, so running again with a different `CADDY_DOMAIN`
-adds a second site instead of replacing the first. The config is validated before Caddy is
-reloaded, and 80/tcp, 443/tcp and 443/udp are opened in ufw.
+adds a second site instead of replacing the first (override `CADDY_UPSTREAM=` inline to make it
+a static site). The config is validated before Caddy is reloaded, and 80/tcp, 443/tcp and
+443/udp are opened in ufw.
 
 ## How secrets are handled
 
@@ -94,5 +106,5 @@ reloaded, and 80/tcp, 443/tcp and 443/udp are opened in ufw.
 ## Provider handling
 
 `PROVIDER=auto` (default) detects DigitalOcean from DMI and reuses the SSH key DO injected into
-root's `authorized_keys`. Anywhere else, the key comes from `SSH_PUBKEY_FILE_LOCAL`
-(default `~/.ssh/id_ed25519.pub`) or `SSH_PUBKEY`. An explicit key always wins.
+root's `authorized_keys`. Anywhere else, the keys come from `SSH_PUBKEY_FILE_LOCAL`
+(default `~/.ssh/id_ed25519.pub`) and `SSH_PUBKEY`; both are installed when both are set.
